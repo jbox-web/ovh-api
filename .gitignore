@@ -1,0 +1,22 @@
+# Node deps for the conversion scripts.
+scripts/node_modules/
+scripts/package-lock.json
+
+# Generated OpenAPI 3 spec (reproducible from versions/raw via `mise run convert`).
+versions/ovh.oas3.json
+
+# Generator jar — built from the openapi-generator fork (ruby-idiomatic branch), not committed.
+/openapi-generator-cli.jar
+
+# YARD documentation (generated; deployed to Pages, not committed).
+/doc/
+/.yardoc/
+
+# Ruby.
+/.bundle/
+/vendor/bundle/
+Gemfile.lock
+/coverage/
+/pkg/
+/tmp/
+*.gem

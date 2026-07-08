@@ -1,0 +1,99 @@
+[tools]
+java = "openjdk-21"
+ruby = "3.3"
+node = "22"
+
+[vars]
+SPEC_OPTS = "{% if exec(command='(tty -s && echo true) || echo false') == 'true' %}--format documentation{% endif %}"
+
+[env]
+_JAVA_OPTIONS = "-DmaxYamlCodePoints=99999999"
+
+# --- Local openapi-generator fork (ruby-idiomatic lives here, not in any published jar). ---
+# The ruby-idiomatic generator + its auth-signing seam are only in the fork's CLI jar. The
+# jar is authoritative: rebuild it after any template/Java change
+#   (cd "$OVH_FORK" && ./mvnw -pl modules/openapi-generator-cli -am package -DskipTests)
+# so generation always uses the embedded templates. Override OVH_FORK if the fork moves.
+OVH_FORK = "/Users/nicolas/PROJECTS/CRYSTAL/openapi-generator"
+OVH_FORK_JAR = "{{env.OVH_FORK}}/modules/openapi-generator-cli/target/openapi-generator-cli.jar"
+
+# --- Pipeline (machine-generated; do not hand-edit lib/**) ---
+
+[tasks.fetch]
+description = "Refresh the pinned OVH 1.2 schemas from api.ovh.com (70 top-level resources)"
+run = """
+mkdir -p versions/raw
+while IFS= read -r p; do
+  slug=$(printf '%s' "$p" | sed 's#^/##; s#/#_#g')
+  curl -sf --max-time 30 "https://api.ovh.com/1.0${p}.json" -o "versions/raw/${slug}.json" \
+    || echo "WARN: fetch failed for ${p}"
+done < versions/resources.txt
+echo "pinned: $(ls versions/raw | wc -l | tr -d ' ') schemas"
+"""
+
+[tasks.convert]
+description = "Convert pinned Swagger 1.2 -> single OpenAPI 3.0 (versions/ovh.oas3.json)"
+run = """
+(cd scripts && npm install --silent)
+node scripts/convert.mjs
+"""
+
+[tasks.generate]
+description = "Generate the ovh-api transport gem from the converted spec (-g ruby-idiomatic)"
+run = """
+# Prefer a jar dropped at repo root (CI regenerate.yml builds it there); fall back to the
+# local fork build for interactive dev, so `mise run generate` works in both contexts.
+JAR="openapi-generator-cli.jar"
+test -f "$JAR" || JAR="$OVH_FORK_JAR"
+test -f "$JAR" || { echo "No generator jar: build it in the fork (cd $OVH_FORK && ./mvnw -pl modules/openapi-generator-cli -am package -DskipTests) or drop openapi-generator-cli.jar at repo root"; exit 1; }
+test -f versions/ovh.oas3.json || { echo "Run 'mise run convert' first."; exit 1; }
+# Purge only generated code (lib/**). Hand-maintained files are protected by
+# .openapi-generator-ignore; NEVER add versions/, scripts/ or mise.toml here.
+rm -rf lib
+java -jar "$JAR" generate \
+  -i versions/ovh.oas3.json \
+  -g ruby-idiomatic \
+  -o . \
+  --skip-validate-spec \
+  --additional-properties gemName=ovh-api,moduleName=Ovh::Api,gemVersion=0.1.0 \
+  --additional-properties "gemAuthor=Nicolas Rodriguez" \
+  --additional-properties gemAuthorEmail=nico@nicoladmin.fr \
+  --additional-properties gemHomepage=https://github.com/jbox-web/ovh-api \
+  --additional-properties "gemSummary=Ruby transport gem for the entire OVH REST API" \
+  --additional-properties "gemDescription=Generated Ruby HTTP client covering all OVH REST API resources built from OVH published schemas." \
+  --additional-properties gemLicense=MIT \
+  --global-property apiDocs=false,modelDocs=false,apiTests=true,modelTests=false
+"""
+
+[tasks.format]
+description = "Format generated code (rubocop -A over lib)"
+# Use the generated binstub (sets BUNDLE_GEMFILE + bundler/setup), invoked via `ruby`:
+# the bare `rubocop` binary is not on PATH in the task shell (silently skipped this step),
+# and the binstub is regenerated without its executable bit, so calling it directly fails.
+run = "ruby bin/rubocop -A lib"
+
+[tasks.build]
+description = "convert + generate + format"
+run = '''
+mise run convert
+mise run generate
+mise run format
+'''
+
+# --- Development ---
+
+[tasks."dev:deps"]
+description = "Install Ruby dependencies"
+run = "bundle install"
+
+[tasks."dev:spec"]
+description = "Run the spec suite"
+run = "bundle exec rspec {{vars.SPEC_OPTS}}"
+
+[tasks."dev:docs"]
+description = "Generate YARD API documentation into ./doc"
+# yard is not part of the generated Gemfile (kept lean); install it on demand.
+run = """
+gem list -i yard >/dev/null 2>&1 || gem install --no-document yard
+yard doc 'lib/**/*.rb'
+"""

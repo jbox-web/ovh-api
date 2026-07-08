@@ -1,0 +1,18 @@
+# Hand-maintained files — DO NOT overwrite on generation.
+# Everything else (notably lib/**) is 100% generated: do not edit it by hand.
+
+# Conversion pipeline + orchestration (the reason this gem can exist at all).
+mise.toml
+scripts/**
+versions/**
+
+# Repo-level docs and housekeeping.
+README.md
+LICENSE
+.gitignore
+.openapi-generator-ignore
+
+# Upstream CI configs we don't use (we rely on GitHub Actions emitted by the generator).
+.travis.yml
+.gitlab-ci.yml
+git_push.sh

@@ -1,0 +1,14 @@
+{
+  "name": "ovh-api-schema-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Convert OVH's Swagger 1.2 schemas into one OpenAPI 3.0 document (see convert.mjs).",
+  "type": "module",
+  "scripts": {
+    "convert": "node convert.mjs"
+  },
+  "dependencies": {
+    "swagger-converter": "1.5.1",
+    "swagger2openapi": "2.9.4"
+  }
+}
